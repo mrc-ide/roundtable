@@ -80,6 +80,9 @@ roundtable_rtm_prepare <- function(name, test_run = FALSE, short_run = FALSE,
   message("Uploading metadata")
   dest$upload(tmp, "metadata.rds", progress = TRUE)
 
+  message("Start this job on the cluster by running")
+  message(sprintf("  ./roundtable run %s", key))
+
   key
 }
 
@@ -150,6 +153,9 @@ roundtable_rtm_run <- function(key, test_job = FALSE, upgrade = FALSE,
 
   files <- sprintf("%s/%s.zip", workdir, vapply(results, "[[", "", "id"))
   roundtable_upload_results(files, key, incoming$metadata, workdir, folder)
+
+  message("Import this job on the server by running")
+  message(sprintf("  ./roundtable import %s", key))
 }
 
 
