@@ -221,8 +221,8 @@ roundtable_rtm_list <- function() {
   message("Querying sharepoint; this may take a second...")
   folder <- sharepoint_folder()
   incoming <- folder$folder("incoming")
-  incoming_contents <- incoming$list()
-  incoming_data <- lapply(incoming_contents$name, incoming$list)
+  incoming_contents <- incoming$folders()
+  incoming_data <- lapply(incoming_contents$name, incoming$files)
   dat <- incoming_contents[c("name", "created")]
   dat$valid <- vlapply(incoming_data, function(x)
     "metadata.rds" %in% x$name)
@@ -230,8 +230,8 @@ roundtable_rtm_list <- function() {
     "running" %in% x$name)
 
   results <- folder$folder("results")
-  results_contents <- results$list()
-  results_data <- lapply(results_contents$name, results$list)
+  results_contents <- results$folders()
+  results_data <- lapply(results_contents$name, results$files)
 
   ## Bit of a faff here:
   results_ids <- results_contents$name
@@ -250,8 +250,38 @@ roundtable_rtm_list <- function() {
 }
 
 
+##' Print summary status for a single key
+##'
+##' @title Summary status
+##'
+##' @param key A key, as created by [roundtable_rtm_prepare()]
+##'
+##' @export
+##'
+##' @return Primarily called for its side effect, though some data is
+##'   returned in a list.
 roundtable_rtm_status <- function(key) {
-  browser()
+  folder <- sharepoint_folder()
+  incoming <- folder$files(file.path("incoming", key))$name
+  results <- folder$files(file.path("results", key))$name
+
+  res <- list(name = key,
+              status = list(
+                valid = "metadata.rds" %in% incoming,
+                started = "running" %in% incoming,
+                finished = "finished" %in% results,
+                imported = "imported" %in% results))
+
+  cli::cli_alert(key)
+  for (i in names(res$status)) {
+    if (res$status[[i]]) {
+      cli::cli_alert_success(i)
+    } else {
+      cli::cli_alert_danger(i)
+    }
+  }
+
+  invisible(res)
 }
 
 
