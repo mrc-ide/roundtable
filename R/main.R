@@ -11,7 +11,7 @@ Options:
 --date=DATE  Date to run; if not given, defaults to today
 --chains=N   Number of chains to run"
 
-main <- function(args = commmandArgs(TRUE)) {
+main <- function(args = commandArgs(TRUE)) {
   dat <- main_parse(args)
   do.call(dat$target, dat$args)
 }
