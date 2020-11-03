@@ -29,6 +29,7 @@ main_parse <- function(args) {
     mode <- "prepare"
     target <- roundtable_rtm_prepare
     args <- dat[c("short_run", "test_run", "date", "chains", "name")]
+    args$chains <- as.integer(args$chains)
   } else if (dat$run) {
     mode <- "status"
     target <- roundtable_rtm_run

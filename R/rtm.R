@@ -136,8 +136,19 @@ roundtable_rtm_run <- function(key, test_job = FALSE, upgrade = FALSE,
   }
 
   results <- grp$wait(timeout = Inf)
-  files <- sprintf("%s/%s.zip", workdir, vapply(results, "[[", "", "id"))
+  status <- grp$status()
+  message("Results:")
+  print(table(status))
 
+  if (any(status == "ERROR")) {
+    message("Some tasks failed! The log for the first failed task is below")
+    print(grp$tasks[[which(status == "ERROR")[[1]]]]$log())
+    message("To investigate further, run")
+    message(sprintf('roundtable::roundtable_debug("%s")', key))
+    stop("Stopping as task failed")
+  }
+
+  files <- sprintf("%s/%s.zip", workdir, vapply(results, "[[", "", "id"))
   roundtable_upload_results(files, key, incoming$metadata, workdir, folder)
 }
 
@@ -294,7 +305,7 @@ prepare_cluster <- function(metadata, initialise = TRUE) {
                                package_sources = src)
 
   cfg <- didehpc::didehpc_config(cluster = "big", template = "32Core",
-                                 cores = 32)
+                                 cores = 32, parallel = FALSE)
   didehpc::queue_didehpc(ctx, config = cfg, initialise = initialise)
 }
 
