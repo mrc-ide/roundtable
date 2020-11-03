@@ -197,7 +197,8 @@ roundtable_rtm_import <- function(key) {
   ## This section might need tweaking for different tasks:
   keep <- c("date", "short_run", "kernel_scaling")
   parameters <- metadata$parameters[[1]][keep]
-  orderly:::orderly_run_internal(name_combined, parameters = parameters)
+  orderly:::orderly_run_internal(name_combined, parameters = parameters,
+                                 commit = TRUE)
 
   message(sprintf("Finished processing '%s' (%s)", key, metadata$name))
   ## TODO: This will be fixed once I update spud.
