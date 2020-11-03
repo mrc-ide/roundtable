@@ -1,0 +1,11 @@
+sys_getenv <- function(name) {
+  value <- Sys.getenv(name, NA_character_)
+  if (is.na(value)) {
+    stop(sprintf("Environment variable '%s' is not set", name))
+  }
+  value
+}
+
+drop_null <- function(x) {
+  x[!vapply(x, is.null, TRUE)]
+}
