@@ -51,7 +51,9 @@ main_parse <- function(args) {
 write_script <- function(path) {
   dir.create(path, FALSE, TRUE)
   rscript <- "#!/usr/bin/env Rscript"
-  code <- c(rscript, "roundtable:::main()")
+  code <- c(rscript,
+            "options(pillar.min_chars = Inf)",
+            "roundtable:::main()")
   path_bin <- file.path(path, "roundtable")
   writeLines(code, path_bin)
   Sys.chmod(path_bin, "755")

@@ -147,7 +147,8 @@ roundtable_rtm_run <- function(key, test_job = FALSE, upgrade = FALSE,
     message("Some tasks failed! The log for the first failed task is below")
     print(grp$tasks[[which(status == "ERROR")[[1]]]]$log())
     message("To investigate further, run")
-    message(sprintf('roundtable::roundtable_debug("%s")', key))
+    message(sprintf('grp <- roundtable::roundtable_debug("%s")', key))
+    message("And work with the 'grp' task bundle object")
     stop("Stopping as task failed")
   }
 
@@ -206,6 +207,10 @@ roundtable_rtm_import <- function(key) {
   orderly:::orderly_run_internal(name_combined, parameters = parameters,
                                  commit = TRUE)
 
+  tmp <- tempfile()
+  writeLines("", tmp)
+  results$upload(tmp, "imported")
+
   message(sprintf("Finished processing '%s' (%s)", key, metadata$name))
   ## TODO: This will be fixed once I update spud.
   message("Please delete the incoming and results directories on sharepoint")
@@ -213,12 +218,63 @@ roundtable_rtm_import <- function(key) {
 
 
 roundtable_rtm_list <- function() {
-  browser()
+  message("Querying sharepoint; this may take a second...")
+  folder <- sharepoint_folder()
+  incoming <- folder$folder("incoming")
+  incoming_contents <- incoming$list()
+  incoming_data <- lapply(incoming_contents$name, incoming$list)
+  dat <- incoming_contents[c("name", "created")]
+  dat$valid <- vlapply(incoming_data, function(x)
+    "metadata.rds" %in% x$name)
+  dat$started <- vlapply(incoming_data, function(x)
+    "running" %in% x$name)
+
+  results <- folder$folder("results")
+  results_contents <- results$list()
+  results_data <- lapply(results_contents$name, results$list)
+
+  ## Bit of a faff here:
+  results_ids <- results_contents$name
+  extra <- setdiff(results_ids, dat$name)
+  if (length(extra)) {
+    dat <- merge(dat, results_contents["name"], all = TRUE)
+  }
+
+  finished <- vlapply(results_data, function(x) "finished" %in% x$name)
+  imported <- vlapply(results_data, function(x) "imported" %in% x$name)
+  dat$finished <- dat$name %in% results_ids[finished]
+  dat$imported <- dat$name %in% results_ids[imported]
+  v <- c(setdiff(names(dat), "created"), "created")
+  dat <- dat[order(dat$created), v]
+  dat
 }
 
 
 roundtable_rtm_status <- function(key) {
   browser()
+}
+
+
+##' Debug a cluster run. Must be run on the cluster.
+##'
+##' @title Debug a cluster run
+##'
+##' @param key Key used when starting the tasks with [roundtable_rtm_run()]
+##'
+##' @return A "task_bundle" object. Most likely you'll want to extract
+##'   individual tasks (`t <- grp$tasks[[1]]`) and look at their
+##'   errors (`t$result()` and `t$result()$trace`) and logs
+##'   (`t$log()`).
+##'
+##' @export
+roundtable_rtm_debug <- function(key) {
+  folder <- sharepoint_folder()
+  incoming <- roundtable_download_incoming(key, folder)
+  if (!incoming$is_running) {
+    stop("This key has not been started")
+  }
+  obj <- prepare_cluster(incoming$metadata, initialise = FALSE)
+  obj$task_bundle_get(incoming$id)
 }
 
 
@@ -261,10 +317,10 @@ roundtable_download_incoming <- function(key, folder) {
   bundles <- dir(dest, pattern = "^[0-9]{8}-[0-9]{6}-[[:xdigit:]]{8}\\.zip$",
                  full.names = TRUE)
   metadata <- readRDS(file.path(dest, "metadata.rds"))
-  is_running <- "running" %in% contents
+  is_running <- "running" %in% contents$name
 
   if (is_running) {
-    id <- readRDS(file.path(dest, "running"))
+    id <- readLines(file.path(dest, "running"))
   } else {
     id <- NULL
   }

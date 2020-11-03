@@ -9,3 +9,7 @@ sys_getenv <- function(name) {
 drop_null <- function(x) {
   x[!vapply(x, is.null, TRUE)]
 }
+
+vlapply <- function(x, fun, ...) {
+  vapply(x, fun, logical(1), ...)
+}
