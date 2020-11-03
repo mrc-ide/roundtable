@@ -106,10 +106,6 @@ roundtable_rtm_run <- function(key, test_job = FALSE, upgrade = FALSE,
     stop(sprintf("Key '%s' has already been run", key))
   }
 
-  file.path("incoming", key)
-  dir.create(dest, FALSE, TRUE)
-  contents <- src$list()
-
   incoming <- roundtable_download_incoming(key, folder)
 
   obj <- prepare_cluster(incoming$metadata, initialise = TRUE)
