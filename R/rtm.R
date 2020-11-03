@@ -83,7 +83,7 @@ roundtable_rtm_prepare <- function(name, test_run = FALSE, short_run = FALSE,
   message("Start this job on the cluster by running")
   message(sprintf("  ./roundtable run %s", key))
 
-  key
+  invisible(key)
 }
 
 

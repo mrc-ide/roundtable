@@ -7,7 +7,6 @@ test:
 	${RSCRIPT} -e 'library(methods); devtools::test()'
 
 roxygen:
-	./scripts/update_dust_class
 	@mkdir -p man
 	${RSCRIPT} -e "library(methods); devtools::document()"
 
