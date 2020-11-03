@@ -198,6 +198,16 @@ roundtable_rtm_import <- function(key) {
 }
 
 
+roundtable_rtm_list <- function() {
+  browser()
+}
+
+
+roundtable_rtm_status <- function(key) {
+  browser()
+}
+
+
 rtm_cluster_info <- function(key) {
   folder <- sharepoint_folder()
   incoming <- download_incoming(key, folder)
