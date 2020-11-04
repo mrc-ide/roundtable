@@ -15,7 +15,7 @@ RoxygenNote: 7.1.1
 Imports:
   cli,
   docopt,
-  orderly,
-  spud
+  orderly (>= 1.2.17),
+  spud (>= 0.1.6)
 Suggests:
   didehpc
