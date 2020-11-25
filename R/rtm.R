@@ -22,267 +22,18 @@
 ##' @export
 roundtable_rtm_prepare <- function(name, test_run = FALSE, short_run = FALSE,
                                    date = NULL, chains = 16L) {
-  ## TODO: check git here, or have that passed through to the bundle_pack
-  regions <- c("east_of_england",
-               "midlands",
-               "london",
-               "north_east_and_yorkshire",
-               "north_west",
-               "south_east",
-               "south_west",
-               "scotland",
-               "wales",
-               "northern_ireland")
-  if (is.null(date)) {
-    date <- as.character(Sys.Date())
-  }
-  parameters <- lapply(regions, function(x)
-    list(date = date,
-         chains = chains,
-         region = x,
-         short_run = short_run,
-         kernel_scaling = 0.2)) # should this be tuneable?
-
-  if (test_run) {
-    message("Trying a short run, as requested")
-    ## Do some sort of test run here - if this fails, nothing proceeds
-    orderly::orderly_run(name,
-                         parameters = list(date = date,
-                                           chains = 2,
-                                           short_run = TRUE))
-  }
-
-  path <- tempfile()
-  res <- lapply(parameters, function(p)
-    orderly::orderly_bundle_pack(path, name, p))
-
   folder <- sharepoint_folder()
-
-  key <- rtm_key()
-  message(sprintf("Uploading %d items to sharepoint with key '%s'",
-                  length(res), key))
-  dest <- folder$create(file.path("incoming", key))
-  for (x in res) {
-    message(sprintf("Uploading '%s'", basename(x$path)))
-    dest$upload(x$path, progress = TRUE)
-  }
-
-  p <- file.path(orderly::orderly_config()$root, "src", name, "orderly.yml")
-  packages <- yaml::read_yaml(p)$packages
-  versions <- lapply(packages, packageVersion)
-  names(versions) <- packages
-  names(parameters) <- vapply(res, "[[", "", "id")
-  metadata <- list(name = name,
-                   parameters = parameters,
-                   packages = versions)
-  tmp <- tempfile()
-  saveRDS(metadata, tmp)
-  message("Uploading metadata")
-  dest$upload(tmp, "metadata.rds", progress = TRUE)
-
-  message("Start this job on the cluster by running")
-  message(sprintf("  ./roundtable run %s", key))
-
-  invisible(key)
+  key <- roundtable_key()
+  res <- roundtable_rtm_pack(name, test_run, short_run, date, chains)
+  roundtable_incoming_upload(res$tasks, key, folder)
+  roundtable_metadata_upload(res$metadata, key, folder)
 }
 
 
-##' Run a prepared RTM job on the cluster. Requires a key as created
-##' by [roundtable_rtm_prepare()]. Run this on the cluster, from a
-##' directory that is *not* the checked out copy of the orderly
-##' sources, as this will not interact with it.
-##'
-##' @title Run RTM job on cluster
-##'
-##' @param key The job key
-##'
-##' @param test_job Send a test job to the cluster to ensure that
-##'   everything works.
-##'
-##' @return
-##' @author Richard Fitzjohn
-roundtable_rtm_run <- function(key, test_job = FALSE, upgrade = FALSE,
-                               rerun = FALSE) {
-  folder <- sharepoint_folder()
-
-  if ("finished" %in% folder$files(file.path("results", key))$name) {
-    stop(sprintf("Key '%s' has already been run", key))
-  }
-
-  incoming <- roundtable_download_incoming(key, folder)
-
-  obj <- prepare_cluster(incoming$metadata, initialise = TRUE)
-  obj$provision()
-  if (test_job) {
-    t <- obj$enqueue(packageVersion("sircovid"))
-    t$wait(timeout = 100)
-  }
-
-  if (incoming$is_running && !rerun) {
-    message(sprintf("Already running '%s' as '%s'", key, id))
-    id <- incoming$id
-    grp <- obj$task_bundle_get(id)
-    workdir <- file.path("working", id)
-  } else {
-    id <- ids::adjective_animal(style = "kebab")
-    message(sprintf("Running '%s' as '%s'", key, id))
-
-    ## Then the ids that need running
-    workdir <- file.path("working", id)
-    grp <- obj$lapply(incoming$bundles, function(p, workdir)
-      orderly::orderly_bundle_run(p, workdir), workdir = workdir,
-      timeout = 0, name = id)
-
-    tmp <- tempfile()
-    writeLines(id, tmp)
-    incoming$folder$upload(tmp, "running")
-  }
-
-  results <- grp$wait(timeout = Inf)
-  status <- grp$status()
-  message("Results:")
-  print(table(status))
-
-  if (any(status == "ERROR")) {
-    message("Some tasks failed! The log for the first failed task is below")
-    print(grp$tasks[[which(status == "ERROR")[[1]]]]$log())
-    message("To investigate further, run")
-    message(sprintf('grp <- roundtable::roundtable_debug("%s")', key))
-    message("And work with the 'grp' task bundle object")
-    stop("Stopping as task failed")
-  }
-
-  files <- sprintf("%s/%s.zip", workdir, vapply(results, "[[", "", "id"))
-  roundtable_upload_results(files, key, incoming$metadata, workdir, folder)
-
-  message("Import this job on the server by running")
-  message(sprintf("  ./roundtable import %s", key))
-}
 
 
-##' Import an RTM run back into orderly.
-##' @title Import an RTM run into orderly
-##'
-##' @param key The key created by [roundtable_rtm_prepare()] and run
-##'   with [roundtable_rtm_run()]
-##'
-##' @export
-roundtable_rtm_import <- function(key) {
-  folder <- sharepoint_folder()
-
-  results <- folder$folder(file.path("results", key), verify = TRUE)
-  contents <- results$list()
-  if (!("finished" %in% contents$name)) {
-    stop("Results are not finished")
-  }
-
-  re <- "^[0-9]{8}-[0-9]{6}-[[:xdigit:]]{8}\\.zip$"
-  ids <- grep(re, contents$name, value = TRUE)
-
-  tmp <- tempfile()
-  dir.create(tmp, FALSE, TRUE)
-  for (f in contents$name) {
-    message(sprintf("Downloading '%s'", f))
-    results$download(f, file.path(tmp, f), progress = TRUE)
-  }
-
-  metadata <- readRDS(file.path(tmp, "metadata.rds"))
-
-  for (p in ids) {
-    orderly::orderly_bundle_import(file.path(tmp, p))
-  }
-
-  unlink(tmp, recursive = TRUE)
-
-  message("Running the combined task")
-  ## We need to run the combined task here too. Getting this "Right"
-  ## would be much easier after we implement the transactional
-  ## workflow approach so that we might see the state of the orderly
-  ## archive as a log. For now, we assume that that combined task will
-  ## be ok to run.
-  name_combined <- paste0(metadata$name, "_combined")
-  ## This section might need tweaking for different tasks:
-  keep <- c("date", "short_run", "kernel_scaling")
-  parameters <- metadata$parameters[[1]][keep]
-  orderly:::orderly_run_internal(name_combined, parameters = parameters,
-                                 commit = TRUE)
-
-  tmp <- tempfile()
-  writeLines("", tmp)
-  results$upload(tmp, "imported")
-
-  message(sprintf("Finished processing '%s' (%s)", key, metadata$name))
-  ## TODO: This will be fixed once I update spud.
-  message("Please delete the incoming and results directories on sharepoint")
-}
 
 
-roundtable_rtm_list <- function() {
-  message("Querying sharepoint; this may take a second...")
-  folder <- sharepoint_folder()
-  incoming <- folder$folder("incoming")
-  incoming_contents <- incoming$folders()
-  incoming_data <- lapply(incoming_contents$name, incoming$files)
-  dat <- incoming_contents[c("name", "created")]
-  dat$valid <- vlapply(incoming_data, function(x)
-    "metadata.rds" %in% x$name)
-  dat$started <- vlapply(incoming_data, function(x)
-    "running" %in% x$name)
-
-  results <- folder$folder("results")
-  results_contents <- results$folders()
-  results_data <- lapply(results_contents$name, results$files)
-
-  ## Bit of a faff here:
-  results_ids <- results_contents$name
-  extra <- setdiff(results_ids, dat$name)
-  if (length(extra)) {
-    dat <- merge(dat, results_contents["name"], all = TRUE)
-  }
-
-  finished <- vlapply(results_data, function(x) "finished" %in% x$name)
-  imported <- vlapply(results_data, function(x) "imported" %in% x$name)
-  dat$finished <- dat$name %in% results_ids[finished]
-  dat$imported <- dat$name %in% results_ids[imported]
-  v <- c(setdiff(names(dat), "created"), "created")
-  dat <- dat[order(dat$created), v]
-  dat
-}
-
-
-##' Print summary status for a single key
-##'
-##' @title Summary status
-##'
-##' @param key A key, as created by [roundtable_rtm_prepare()]
-##'
-##' @export
-##'
-##' @return Primarily called for its side effect, though some data is
-##'   returned in a list.
-roundtable_rtm_status <- function(key) {
-  folder <- sharepoint_folder()
-  incoming <- folder$files(file.path("incoming", key))$name
-  results <- folder$files(file.path("results", key))$name
-
-  res <- list(name = key,
-              status = list(
-                valid = "metadata.rds" %in% incoming,
-                started = "running" %in% incoming,
-                finished = "finished" %in% results,
-                imported = "imported" %in% results))
-
-  cli::cli_alert(key)
-  for (i in names(res$status)) {
-    if (res$status[[i]]) {
-      cli::cli_alert_success(i)
-    } else {
-      cli::cli_alert_danger(i)
-    }
-  }
-
-  invisible(res)
-}
 
 
 ##' Debug a cluster run. Must be run on the cluster.
@@ -299,7 +50,7 @@ roundtable_rtm_status <- function(key) {
 ##' @export
 roundtable_rtm_debug <- function(key) {
   folder <- sharepoint_folder()
-  incoming <- roundtable_download_incoming(key, folder)
+  incoming <- roundtable_incoming_download(key, folder)
   if (!incoming$is_running) {
     stop("This key has not been started")
   }
@@ -310,58 +61,13 @@ roundtable_rtm_debug <- function(key) {
 
 rtm_cluster_info <- function(key) {
   folder <- sharepoint_folder()
-  incoming <- download_incoming(key, folder)
+  incoming <- roundtable_incoming_download(key, folder)
   id <- readLines(incoming$folder$download("running"))
   obj <- prepare_cluster(FALSE)
   obj$task_bundle_get(id)
 }
 
 
-roundtable_download_incoming <- function(key, folder) {
-  incoming <- folder$folder("incoming", verify = TRUE)
-
-  contents <- incoming$list()
-  if (nrow(contents) == 0) {
-    stop("No incoming tasks")
-  }
-  if (!(key %in% contents$name)) {
-    stop(sprintf("Unknown key '%s'; valid options:\n%s",
-                 key, paste("  -", contents$name, collapse = "\n")))
-  }
-  src <- incoming$folder(key)
-
-  dest <- file.path("incoming", key)
-  dir.create(dest, FALSE, TRUE)
-  contents <- src$list()
-
-  for (p in contents$name) {
-    dest_p <- file.path(dest, p)
-    if (file.exists(dest_p)) {
-      message(sprintf("Not downloading '%s'", dest_p))
-    } else {
-      message(sprintf("Downloading '%s'", dest_p))
-      src$download(p, dest_p)
-    }
-  }
-
-  bundles <- dir(dest, pattern = "^[0-9]{8}-[0-9]{6}-[[:xdigit:]]{8}\\.zip$",
-                 full.names = TRUE)
-  metadata <- readRDS(file.path(dest, "metadata.rds"))
-  is_running <- "running" %in% contents$name
-
-  if (is_running) {
-    id <- readLines(file.path(dest, "running"))
-  } else {
-    id <- NULL
-  }
-
-  list(key = key,
-       bundles = bundles,
-       is_running = is_running,
-       id = id,
-       folder = src,
-       metadata = metadata)
-}
 
 roundtable_upload_results <- function(files, key, metadata, workdir, folder) {
   dest <- folder$create(file.path("results", key))
@@ -382,28 +88,53 @@ roundtable_upload_results <- function(files, key, metadata, workdir, folder) {
 }
 
 
-prepare_cluster <- function(metadata, initialise = TRUE) {
-  # Interactively on Windows, I need to do a web_login this before
-  # running. Not sure how to do the auth if these scripts are run
-  # directly from the command-line.
-  didehpc::web_login()
-
-  ## This might want updating to be more tuneable. We could read this
-  ## from the orderly config if needed, but that's not yet supported.
-  packages <- c(names(metadata$packages),
-                "orderly")
-
-  src <- provisionr::package_sources(repos = "drat://ncov-ic")
-  ctx <- context::context_save("contexts", packages = packages,
-                               package_sources = src)
-
-  cfg <- didehpc::didehpc_config(cluster = "big", template = "32Core",
-                                 cores = 32, parallel = FALSE)
-  didehpc::queue_didehpc(ctx, config = cfg, initialise = initialise)
+rtm_regions <- function() {
+  c("east_of_england",
+    "midlands",
+    "london",
+    "north_east_and_yorkshire",
+    "north_west",
+    "south_east",
+    "south_west",
+    "scotland",
+    "wales",
+    "northern_ireland")
 }
 
 
-rtm_key <- function() {
-  sprintf("%s-%s", format(Sys.Date(), "%Y%m%d"),
-          ids::adjective_animal(1, style = "kebab"))
+roundtable_rtm_pack <- function(name, test_run, short_run, date, chains) {
+  regions <- rtm_regions()
+  if (is.null(date)) {
+    date <- as.character(Sys.Date())
+  }
+  parameters <- lapply(regions, function(x)
+    list(date = date,
+         chains = chains,
+         region = x,
+         short_run = short_run,
+         kernel_scaling = 0.2)) # should this be tuneable?
+
+  if (test_run) {
+    message("Trying a short run, as requested")
+    ## Do some sort of test run here - if this fails, nothing proceeds
+    orderly::orderly_run(name,
+                         parameters = list(date = date,
+                                           chains = 2,
+                                           short_run = TRUE))
+  }
+
+  path <- tempfile()
+  tasks <- lapply(parameters, function(p)
+    orderly::orderly_bundle_pack(path, name, p))
+
+  p <- file.path(orderly::orderly_config()$root, "src", name, "orderly.yml")
+  packages <- yaml::read_yaml(p)$packages
+  versions <- lapply(packages, packageVersion)
+  names(versions) <- packages
+  names(parameters) <- vapply(tasks, "[[", "", "id")
+  metadata <- list(name = name,
+                   parameters = parameters,
+                   packages = versions)
+
+  list(tasks = tasks, metadata = metadata)
 }

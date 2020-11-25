@@ -32,7 +32,7 @@ main_parse <- function(args) {
     args$chains <- as.integer(args$chains)
   } else if (dat$run) {
     mode <- "status"
-    target <- roundtable_rtm_run
+    target <- roundtable_run
     args <- dat[c("test_job", "key")]
   } else if (dat$status) {
     mode <- "status"
@@ -40,7 +40,7 @@ main_parse <- function(args) {
     args <- dat["key"]
   } else if (dat$import) {
     mode <- "import"
-    target <- roundtable_rtm_import
+    target <- roundtable_import
     args <- dat["key"]
   }
 
