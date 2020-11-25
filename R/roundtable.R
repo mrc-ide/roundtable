@@ -14,6 +14,7 @@
 ##' @author Richard Fitzjohn
 roundtable_run <- function(key, test_job = FALSE, upgrade = FALSE,
                            rerun = FALSE) {
+  browser()
   folder <- sharepoint_folder()
 
   incoming <- roundtable_incoming_download(key, folder)
@@ -22,7 +23,7 @@ roundtable_run <- function(key, test_job = FALSE, upgrade = FALSE,
     stop(sprintf("Key '%s' has already been run", key))
   }
 
-  obj <- prepare_cluster(incoming$metadata, initialise = TRUE)
+  obj <- prepare_cluster(names(incoming$packages), initialise = TRUE)
   if (test_job) {
     t <- obj$enqueue(packageVersion("sircovid"))
     t$wait(timeout = 100)
