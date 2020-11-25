@@ -4,16 +4,16 @@
 \alias{roundtable_run}
 \title{Run roundtable job on cluster}
 \usage{
-roundtable_run(key, test_job = FALSE, upgrade = FALSE, rerun = FALSE)
+roundtable_run(key, test_job = FALSE, rerun = FALSE)
 }
 \arguments{
 \item{key}{The job key}
 
 \item{test_job}{Send a test job to the cluster to ensure that
 everything works.}
-}
-\value{
 
+\item{rerun}{Re-queue/rerun jobs even if they have been
+completed. Rewrites the \code{id} on sharepoint.}
 }
 \description{
 Run a prepared roundtable job on the cluster. Requires a key as

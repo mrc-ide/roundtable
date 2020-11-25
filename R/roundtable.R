@@ -10,13 +10,12 @@
 ##' @param test_job Send a test job to the cluster to ensure that
 ##'   everything works.
 ##'
-##' @return
+##' @param rerun Re-queue/rerun jobs even if they have been
+##'   completed. Rewrites the `id` on sharepoint.
+##'
 ##' @author Richard Fitzjohn
-roundtable_run <- function(key, test_job = FALSE, upgrade = FALSE,
-                           rerun = FALSE) {
-  browser()
+roundtable_run <- function(key, test_job = FALSE, rerun = FALSE) {
   folder <- sharepoint_folder()
-
   incoming <- roundtable_incoming_download(key, folder)
 
   if (incoming$status$finished) {
@@ -25,13 +24,16 @@ roundtable_run <- function(key, test_job = FALSE, upgrade = FALSE,
 
   obj <- prepare_cluster(names(incoming$packages), initialise = TRUE)
   if (test_job) {
-    t <- obj$enqueue(packageVersion("sircovid"))
-    t$wait(timeout = 100)
+    t <- obj$enqueue(utils::packageVersion("sircovid"))
+    res <- t$wait(timeout = 100)
+    if (t$status() == "ERROR") {
+      stop("Error running test job: ", res$message)
+    }
   }
 
   if (incoming$status$running && !rerun) {
     message(sprintf("Already running '%s' as '%s'", key, id))
-    id <- incoming$id
+    id <- incoming$status$id
     grp <- obj$task_bundle_get(id)
     workdir <- file.path("working", id)
   } else {
@@ -44,9 +46,8 @@ roundtable_run <- function(key, test_job = FALSE, upgrade = FALSE,
       orderly::orderly_bundle_run(p, workdir), workdir = workdir,
       timeout = 0, name = id)
 
-    tmp <- tempfile()
-    writeLines(id, tmp)
-    incoming$folder$upload(tmp, file.path("metadata", key, running))
+    write_lines_to_sharepoint(id, file.path("metadata", key, "running"),
+                              incoming$folder)
   }
 
   results <- grp$wait(timeout = Inf)
@@ -71,41 +72,61 @@ roundtable_run <- function(key, test_job = FALSE, upgrade = FALSE,
 }
 
 
+##' Debug a cluster run. Must be run on the cluster.
+##'
+##' @title Debug a cluster run
+##'
+##' @param key Key used when starting the tasks with [roundtable_run()]
+##'
+##' @return A "task_bundle" object. Most likely you'll want to extract
+##'   individual tasks (`t <- grp$tasks[[1]]`) and look at their
+##'   errors (`t$result()` and `t$result()$trace`) and logs
+##'   (`t$log()`).
+##'
+##' @export
+roundtable_debug <- function(key) {
+  folder <- sharepoint_folder()
+  incoming <- roundtable_incoming_download(key, folder)
+  if (!incoming$status$finished) {
+    stop("This key has not been started")
+  }
+  obj <- prepare_cluster(names(incoming$packages), initialise = FALSE)
+  obj$task_bundle_get(incoming$status$id)
+}
+
+
 ##' Import a roundtable job back into orderly.
 ##' @title Import a roundtable job into orderly
 ##'
 ##' @param key The key created by [roundtable_rtm_prepare()] and run
-##'   with [roundtable_rtm_run()]
+##'   with [roundtable_run()]
 ##'
 ##' @export
 roundtable_import <- function(key) {
   folder <- sharepoint_folder()
+  meta <- roundtable_metadata(key, folder)
 
-  browser()
-
-  results <- folder$folder(file.path("results", key), verify = TRUE)
-  contents <- results$list()
-  if (!("finished" %in% contents$name)) {
+  if (!meta$status$finished) {
     stop("Results are not finished")
   }
+  if (!meta$status$imported) {
+    stop("Results have already been imported")
+  }
 
-  re <- "^[0-9]{8}-[0-9]{6}-[[:xdigit:]]{8}\\.zip$"
-  ids <- grep(re, contents$name, value = TRUE)
+  results <- folder$folder(file.path("results", key), verify = TRUE)
+  ids <- names(meta$parameters)
 
   tmp <- tempfile()
+  on.exit(unlink(tmp, recursive = TRUE))
   dir.create(tmp, FALSE, TRUE)
-  for (f in contents$name) {
-    message(sprintf("Downloading '%s'", f))
-    results$download(f, file.path(tmp, f), progress = TRUE)
+  for (i in ids) {
+    message(sprintf("Downloading '%s'", i))
+    results$download(paste0(i, ".zip"), file.path(tmp, i), progress = TRUE)
   }
 
-  metadata <- readRDS(file.path(tmp, "metadata.rds"))
-
-  for (p in ids) {
-    orderly::orderly_bundle_import(file.path(tmp, p))
+  for (i in ids) {
+    orderly::orderly_bundle_import(file.path(tmp, i))
   }
-
-  unlink(tmp, recursive = TRUE)
 
   message("Running the combined task")
   ## We need to run the combined task here too. Getting this "Right"
@@ -113,18 +134,16 @@ roundtable_import <- function(key) {
   ## workflow approach so that we might see the state of the orderly
   ## archive as a log. For now, we assume that that combined task will
   ## be ok to run.
-  name_combined <- paste0(metadata$name, "_combined")
+  name_combined <- paste0(meta$name, "_combined")
   ## This section might need tweaking for different tasks:
   keep <- c("date", "short_run", "kernel_scaling")
-  parameters <- metadata$parameters[[1]][keep]
+  parameters <- meta$parameters[[1]][keep]
   orderly:::orderly_run_internal(name_combined, parameters = parameters,
                                  commit = TRUE)
 
-  tmp <- tempfile()
-  writeLines("", tmp)
-  results$upload(tmp, "imported")
+  write_lines_to_sharepoint("", file.path("metadata", key, "imported"), folder)
 
-  message(sprintf("Finished processing '%s' (%s)", key, metadata$name))
+  message(sprintf("Finished processing '%s' (%s)", key, meta$name))
   ## TODO: This will be fixed once I update spud.
   message("Please delete the incoming and results directories on sharepoint")
 }
@@ -272,12 +291,22 @@ roundtable_metadata <- function(key, folder) {
   ret$folder <- folder
 
   if (ret$status$running) {
-    ## Read the id here
-    browser()
     tmp <- tempfile()
-    metadata$download("running", tmp, progress = FALSE)
+    metadata$download(file.path(key, "running"), tmp, progress = FALSE)
     ret$status$id <- readLines(tmp)
   }
 
   ret
+}
+
+
+roundtable_upload_results <- function(files, key, metadata, workdir, folder) {
+  dest <- folder$create(file.path("results", key))
+  for (f in files) {
+    message(sprintf("Uploading '%s'", basename(f)))
+    dest$upload(f, progress = TRUE)
+  }
+
+  # Write a file called 'finished' to indicate we're all done.
+  write_lines_to_sharepoint("", file.path("metadata", key, "finished"), folder)
 }

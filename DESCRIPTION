@@ -15,8 +15,12 @@ RoxygenNote: 7.1.1
 Imports:
   cli,
   docopt,
+  ids,
   orderly (>= 1.2.17),
   spud (>= 0.1.6),
-  tibble
+  tibble,
+  yaml
 Suggests:
-  didehpc
+  context,
+  didehpc,
+  provisionr

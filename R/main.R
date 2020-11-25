@@ -23,7 +23,7 @@ main_parse <- function(args) {
 
   if (dat$list) {
     mode <- "list"
-    target <- roundtable_rtm_list
+    target <- roundtable_list
     args <- list()
   } else if (dat$prepare) {
     mode <- "prepare"
@@ -36,7 +36,7 @@ main_parse <- function(args) {
     args <- dat[c("test_job", "key")]
   } else if (dat$status) {
     mode <- "status"
-    target <- roundtable_rtm_status
+    target <- roundtable_status
     args <- dat["key"]
   } else if (dat$import) {
     mode <- "import"

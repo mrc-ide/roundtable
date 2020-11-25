@@ -33,5 +33,5 @@ The key
 \description{
 Prepare a rtm run for use on the cluster. This should be run on
 the main server, from master. Once run, note the key, which you
-will want for use with \code{\link[=roundtable_rtm_run]{roundtable_rtm_run()}} on the cluster.
+will want for use with \code{\link[=roundtable_run]{roundtable_run()}} on the cluster.
 }

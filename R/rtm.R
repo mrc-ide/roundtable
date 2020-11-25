@@ -1,6 +1,6 @@
 ##' Prepare a rtm run for use on the cluster. This should be run on
 ##' the main server, from master. Once run, note the key, which you
-##' will want for use with [roundtable_rtm_run()] on the cluster.
+##' will want for use with [roundtable_run()] on the cluster.
 ##'
 ##' @title Prepare a rtm run for use on the cluster.
 ##'
@@ -27,64 +27,6 @@ roundtable_rtm_prepare <- function(name, test_run = FALSE, short_run = FALSE,
   res <- roundtable_rtm_pack(name, test_run, short_run, date, chains)
   roundtable_incoming_upload(res$tasks, key, folder)
   roundtable_metadata_upload(res$metadata, key, folder)
-}
-
-
-
-
-
-
-
-
-##' Debug a cluster run. Must be run on the cluster.
-##'
-##' @title Debug a cluster run
-##'
-##' @param key Key used when starting the tasks with [roundtable_rtm_run()]
-##'
-##' @return A "task_bundle" object. Most likely you'll want to extract
-##'   individual tasks (`t <- grp$tasks[[1]]`) and look at their
-##'   errors (`t$result()` and `t$result()$trace`) and logs
-##'   (`t$log()`).
-##'
-##' @export
-roundtable_rtm_debug <- function(key) {
-  folder <- sharepoint_folder()
-  incoming <- roundtable_incoming_download(key, folder)
-  if (!incoming$is_running) {
-    stop("This key has not been started")
-  }
-  obj <- prepare_cluster(incoming$metadata, initialise = FALSE)
-  obj$task_bundle_get(incoming$id)
-}
-
-
-rtm_cluster_info <- function(key) {
-  folder <- sharepoint_folder()
-  incoming <- roundtable_incoming_download(key, folder)
-  id <- readLines(incoming$folder$download("running"))
-  obj <- prepare_cluster(FALSE)
-  obj$task_bundle_get(id)
-}
-
-
-
-roundtable_upload_results <- function(files, key, metadata, workdir, folder) {
-  dest <- folder$create(file.path("results", key))
-  for (f in files) {
-    message(sprintf("Uploading '%s'", basename(f)))
-    dest$upload(f, progress = TRUE)
-  }
-  message("Uploading metadata")
-  tmp <- tempfile()
-  saveRDS(metadata, tmp)
-  dest$upload(tmp, "metadata.rds", progress = TRUE)
-
-  # Write a file called 'finished' to indicate we're all done.
-  tmp <- tempfile()
-  on.exit(unlink(tmp))
-  writeLines("", tmp)
-  dest$upload(tmp, dest = "finished")
 }
 
 
@@ -129,7 +71,7 @@ roundtable_rtm_pack <- function(name, test_run, short_run, date, chains) {
 
   p <- file.path(orderly::orderly_config()$root, "src", name, "orderly.yml")
   packages <- yaml::read_yaml(p)$packages
-  versions <- lapply(packages, packageVersion)
+  versions <- lapply(packages, utils::packageVersion)
   names(versions) <- packages
   names(parameters) <- vapply(tasks, "[[", "", "id")
   metadata <- list(name = name,

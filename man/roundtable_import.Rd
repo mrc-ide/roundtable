@@ -8,7 +8,7 @@ roundtable_import(key)
 }
 \arguments{
 \item{key}{The key created by \code{\link[=roundtable_rtm_prepare]{roundtable_rtm_prepare()}} and run
-with \code{\link[=roundtable_rtm_run]{roundtable_rtm_run()}}}
+with \code{\link[=roundtable_run]{roundtable_run()}}}
 }
 \description{
 Import a roundtable job back into orderly.

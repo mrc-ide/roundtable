@@ -13,3 +13,11 @@ drop_null <- function(x) {
 vlapply <- function(x, fun, ...) {
   vapply(x, fun, logical(1), ...)
 }
+
+
+write_lines_to_sharepoint <- function(text, path, folder) {
+  tmp <- tempfile()
+  on.exit(unlink(tmp))
+  writeLines(text, tmp)
+  folder$upload(tmp, path)
+}
