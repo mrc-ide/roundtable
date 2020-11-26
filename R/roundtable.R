@@ -33,7 +33,7 @@ roundtable_run <- function(key, test_job = FALSE, rerun = FALSE) {
 
   if (incoming$status$running && !rerun) {
     message(sprintf("Already running '%s' as '%s'", key, id))
-    id <- incoming$status$id
+    id <- incoming$id
     grp <- obj$task_bundle_get(id)
     workdir <- file.path("working", id)
   } else {
@@ -91,7 +91,7 @@ roundtable_debug <- function(key) {
     stop("This key has not been started")
   }
   obj <- prepare_cluster(names(incoming$packages), initialise = FALSE)
-  obj$task_bundle_get(incoming$status$id)
+  obj$task_bundle_get(incoming$id)
 }
 
 
@@ -293,7 +293,7 @@ roundtable_metadata <- function(key, folder) {
   if (ret$status$running) {
     tmp <- tempfile()
     metadata$download(file.path(key, "running"), tmp, progress = FALSE)
-    ret$status$id <- readLines(tmp)
+    ret$id <- readLines(tmp)
   }
 
   ret
