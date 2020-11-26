@@ -109,7 +109,7 @@ roundtable_import <- function(key) {
   if (!meta$status$finished) {
     stop("Results are not finished")
   }
-  if (!meta$status$imported) {
+  if (meta$status$imported) {
     stop("Results have already been imported")
   }
 
