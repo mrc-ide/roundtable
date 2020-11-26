@@ -6,7 +6,8 @@ Authors@R: c(person("Rich", "FitzJohn", role = c("aut", "cre"),
              person("Wes", "Hinsley", role = "aut"),
              person("Imperial College of Science, Technology and Medicine",
                     role = "cph"))
-Description: What the package does (one paragraph).
+Description: Helper scripts for working with 'sircovid', of internal use
+  and interest only. Handles communication between the cluster and the server.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
