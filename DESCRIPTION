@@ -28,4 +28,5 @@ Remotes:
   mrc-ide/context,
   mrc-ide/didehpc,
   mrc-ide/provisionr,
-  reside-ic/spud
+  reside-ic/spud,
+  vimc/orderly
