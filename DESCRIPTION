@@ -24,3 +24,8 @@ Suggests:
   context,
   didehpc,
   provisionr
+Remotes:
+  mrc-ide/context,
+  mrc-ide/didehpc,
+  mrc-ide/provisionr,
+  reside-ic/spud
