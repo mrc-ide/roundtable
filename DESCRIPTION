@@ -7,27 +7,29 @@ Authors@R: c(person("Rich", "FitzJohn", role = c("aut", "cre"),
              person("Imperial College of Science, Technology and Medicine",
                     role = "cph"))
 Description: Helper scripts for working with 'sircovid', of internal use
-  and interest only. Handles communication between the cluster and the server.
+    and interest only. Handles communication between the cluster and the
+    server.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.1.1
 Imports:
-  cli,
-  docopt,
-  ids,
-  orderly (>= 1.2.17),
-  spud (>= 0.1.6),
-  tibble,
-  yaml
+    cli,
+    docopt,
+    ids,
+    orderly (>= 1.2.17),
+    spud (>= 0.1.6),
+    tibble,
+    yaml
 Suggests:
-  context,
-  didehpc,
-  provisionr
+    context,
+    didehpc,
+    provisionr,
+    testthat
 Remotes:
-  mrc-ide/context,
-  mrc-ide/didehpc,
-  mrc-ide/provisionr,
-  reside-ic/spud,
-  vimc/orderly
+    mrc-ide/context,
+    mrc-ide/didehpc,
+    mrc-ide/provisionr,
+    reside-ic/spud,
+    vimc/orderly
